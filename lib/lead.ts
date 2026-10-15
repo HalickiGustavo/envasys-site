@@ -73,18 +73,47 @@ export function captureUtms(): {
 }
 
 /**
- * Isolated submission function. This is the single integration point for a
- * future CRM/HubSpot/API connection. No credentials should ever live here or
- * anywhere in the frontend — this should call an internal API route that holds
- * the secrets server-side.
+ * Envia o formulário público diretamente para a RPC segura do Supabase
+ * usada pelo CRM. Apenas a publishable/anon key fica no navegador.
  */
 export async function submitProjectLead(
   lead: ProjectLead,
 ): Promise<{ ok: boolean }> {
-  // Placeholder: simulate a network request until a backend/CRM is wired up.
-  await new Promise((resolve) => setTimeout(resolve, 900))
-  if (typeof console !== 'undefined') {
-    console.log('[v0] submitProjectLead', lead)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('[Envasys] Supabase não configurado no site.')
+    return { ok: false }
   }
-  return { ok: true }
+
+  try {
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/rpc/submit_website_project_lead`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_payload: lead,
+          p_honeypot: null,
+        }),
+      },
+    )
+
+    if (!response.ok) {
+      const error = await response.text()
+      console.error('[Envasys] Falha ao enviar lead ao CRM:', error)
+      return { ok: false }
+    }
+
+    const result = (await response.json()) as { ok?: boolean }
+    return { ok: result?.ok === true }
+  } catch (error) {
+    console.error('[Envasys] Erro ao conectar com o CRM:', error)
+    return { ok: false }
+  }
 }
